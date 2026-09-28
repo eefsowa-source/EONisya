@@ -69,6 +69,7 @@ EONisyaAudioProcessor::EONisyaAudioProcessor()
 
     apvts.addParameterListener (ParamIDs::reverb, this);
     apvts.addParameterListener (ParamIDs::tempo, this);
+    apvts.addParameterListener (ParamIDs::chorus, this);
 
     reverbParams.roomSize   = 0.6f;
     reverbParams.damping    = 0.5f;
@@ -82,6 +83,7 @@ EONisyaAudioProcessor::~EONisyaAudioProcessor()
 {
     apvts.removeParameterListener (ParamIDs::reverb, this);
     apvts.removeParameterListener (ParamIDs::tempo, this);
+    apvts.removeParameterListener (ParamIDs::chorus, this);
 }
 
 // ── Audio lifecycle ─────────────────────────────────────────────────────
@@ -102,6 +104,13 @@ void EONisyaAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     reverb.prepare (spec);
     reverbReady = true;
 
+    chorus.prepare (spec);
+    applyChorusSettings();
+    chorusReady = true;
+
+    dryScratch.setSize (2, samplesPerBlock, false, true, true);
+    fxScratch.setSize (2, samplesPerBlock, false, true, true);
+
     // Stereo dry + one mono reverb tap
     setLatencySamples (0);
 }
@@ -109,6 +118,7 @@ void EONisyaAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
 void EONisyaAudioProcessor::releaseResources()
 {
     reverbReady = false;
+    chorusReady = false;
 }
 
 bool EONisyaAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
@@ -173,6 +183,10 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             slot->velocity = static_cast<float> (msg.getVelocity()) / 127.0f;
             slot->note = juce::MidiMessage::getMidiNoteInHertz (slot->midiNote);
             slot->ampEnv = 0.0;
+            slot->fegEnv = 0.0;
+            slot->fegStage = 1;
+            slot->filterState = 0.0;
+            slot->filterState2 = 0.0;
 
             for (int i = 0; i < 4; ++i)
             {
@@ -184,12 +198,16 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         else if (msg.isNoteOff())
         {
             for (auto& v : voices)
-                if (v.midiNote == msg.getNoteNumber()) v.active = false;
+                if (v.midiNote == msg.getNoteNumber())
+                {
+                    v.active = false;
+                    v.fegStage = 4;
+                }
         }
     }
 
     const double baseCutoff = static_cast<double> (cutoffParam.load());
-    const double resonance  = static_cast<double> (resoParam.load()) * 2.0 + 0.02;
+    const double svfDamping = 1.0 / (0.5 + static_cast<double> (resoParam.load()) * 8.0);
     const double ampAttack  = juce::jmax (0.0005, 1.0 - std::exp (-1.0 / (static_cast<double> (attackParam.load()) * sampleRate + 1.0)));
     const double ampRelease = juce::jmax (0.0002, 1.0 - std::exp (-1.0 / (static_cast<double> (releaseParam.load()) * sampleRate + 1.0)));
     const double fegAttack  = juce::jmax (0.0005, 1.0 - std::exp (-1.0 / (static_cast<double> (fegAtkParam.load()) * sampleRate + 1.0)));
@@ -214,12 +232,30 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             if (! v.active && v.ampEnv < 1e-4)
                 continue;
 
-            double filterCut = baseCutoff;
+            // Filter envelope (FEG): attack → decay → sustain → release
+            switch (v.fegStage)
+            {
+                case 1:
+                    v.fegEnv += (1.0 - v.fegEnv) * fegAttack;
+                    if (v.fegEnv >= 0.999) { v.fegEnv = 1.0; v.fegStage = 2; }
+                    break;
+                case 2:
+                    v.fegEnv += (fegSus - v.fegEnv) * fegDecay;
+                    if (std::abs (v.fegEnv - fegSus) < 1e-3) { v.fegEnv = fegSus; v.fegStage = 3; }
+                    break;
+                case 4:
+                    v.fegEnv -= v.fegEnv * fegRel;
+                    if (v.fegEnv < 1e-4) { v.fegEnv = 0.0; v.fegStage = 0; }
+                    break;
+                default:
+                    break;
+            }
+
+            double filterCut = baseCutoff * (1.0 + v.fegEnv * 2.0);
             if (keyFollowAmt > 0.0)
                 filterCut *= std::pow (2.0, (v.midiNote - 60) / 12.0 * keyFollowAmt * 1.5);
             filterCut = juce::jmin (filterCut, sampleRate * 0.45);
-            const double fc = std::tan (juce::MathConstants<double>::pi * filterCut / sampleRate);
-            const double k = 1.0 / (fc * (resonance + 0.02) + 1.0 / fc);
+            const double g = std::tan (juce::MathConstants<double>::pi * filterCut / sampleRate);
 
             double sampleValue = 0.0;
             for (int i = 0; i < 4; ++i)
@@ -232,7 +268,7 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sampleValue += wave * v.level[i];
             }
 
-            // Envelope: attack, then decay toward sustain
+            // Amp envelope: attack toward 1 while held, release on note-off
             if (v.active)
             {
                 v.ampEnv = v.ampEnv * (1.0 - ampAttack) + 1.0 * ampAttack;
@@ -243,21 +279,19 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 if (v.ampEnv < 1e-4) v.ampEnv = 0.0;
             }
 
-            double env = v.ampEnv;
-            if (env > fegSus && ! v.active)
-                env = fegSus + (env - fegSus) * (1.0 - fegRel);
-            else if (v.active && env < 1.0)
-                env = juce::jmin (1.0, env + (1.0 - env) * fegDecay * 0.1);
+            const double env = v.ampEnv;
 
-            // SVF filter
-            const double f = fc;
-            const double g = std::tan (juce::MathConstants<double>::pi * filterCut / sampleRate);
-            const double damp = 1.0 / (resonance + 0.02);
+            // TPT state-variable filter (Zavalishin): two integrator states
             const double in = sampleValue * env;
-            const double hp = (in - v.filterState - damp * k * v.filterState) * k;
-            (void) f; (void) g;
-            v.filterState = v.filterState + k * hp;
-            const double lp = v.filterState;
+            const double a1 = 1.0 / (1.0 + g * (g + svfDamping));
+            const double a2 = g * a1;
+            const double a3 = g * a2;
+            const double v3 = in - v.filterState2;
+            const double v1 = a1 * v.filterState + a2 * v3;
+            const double v2 = v.filterState2 + a2 * v.filterState + a3 * v3;
+            v.filterState  = 2.0 * v1 - v.filterState;
+            v.filterState2 = 2.0 * v2 - v.filterState2;
+            const double lp = v2;
 
             // Drive
             double out = std::tanh (lp * drive) * 0.85;
@@ -277,26 +311,42 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         right[sample] = static_cast<float> (outR);
     }
 
-    // Reverb send bus (stereo)
-    if (reverbReady)
+    // FX send buses — parallel taps of the dry synth output
+    if (reverbReady || chorusReady)
     {
-        juce::AudioBuffer<float> wet (2, numSamples);
-        wet.clear();
+        dryScratch.setSize (2, numSamples, false, false, true);
+        fxScratch.setSize (2, numSamples, false, false, true);
         for (int c = 0; c < 2; ++c)
+            dryScratch.copyFrom (c, 0, buffer, c, 0, numSamples);
+
+        if (chorusReady)
         {
-            auto* w = wet.getWritePointer (c);
-            auto* d = buffer.getReadPointer (c);
-            for (int i = 0; i < numSamples; ++i)
-                w[i] = d[i] * revSendParam.load();
+            const float send = choSendParam.load();
+            if (send > 1e-4f)
+            {
+                for (int c = 0; c < 2; ++c)
+                    fxScratch.copyFrom (c, 0, dryScratch, c, 0, numSamples);
+                fxScratch.applyGain (send);
+                juce::dsp::AudioBlock<float> wetBlock (fxScratch);
+                chorus.process (juce::dsp::ProcessContextReplacing<float> (wetBlock));
+                for (int c = 0; c < 2; ++c)
+                    buffer.addFrom (c, 0, fxScratch, c, 0, numSamples);
+            }
         }
-        juce::dsp::AudioBlock<float> wetBlock (wet);
-        reverb.process (juce::dsp::ProcessContextReplacing<float> (wetBlock));
-        for (int c = 0; c < 2; ++c)
+
+        if (reverbReady)
         {
-            auto* out = buffer.getWritePointer (c);
-            auto* w = wet.getReadPointer (c);
-            for (int i = 0; i < numSamples; ++i)
-                out[i] += w[i];
+            const float send = revSendParam.load();
+            if (send > 1e-4f)
+            {
+                for (int c = 0; c < 2; ++c)
+                    fxScratch.copyFrom (c, 0, dryScratch, c, 0, numSamples);
+                fxScratch.applyGain (send);
+                juce::dsp::AudioBlock<float> wetBlock (fxScratch);
+                reverb.process (juce::dsp::ProcessContextReplacing<float> (wetBlock));
+                for (int c = 0; c < 2; ++c)
+                    buffer.addFrom (c, 0, fxScratch, c, 0, numSamples);
+            }
         }
     }
 
@@ -313,9 +363,23 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 }
 
 // ── Parameters ──────────────────────────────────────────────────────────
+void EONisyaAudioProcessor::applyChorusSettings()
+{
+    const float depth = apvts.getRawParameterValue (ParamIDs::chorus)->load();
+    chorus.setRate (0.4f + depth * 6.0f);
+    chorus.setDepth (0.10f + depth * 0.45f);
+    chorus.setCentreDelay (7.0f);
+    chorus.setFeedback (0.0f);
+    chorus.setMix (1.0f);
+}
+
 void EONisyaAudioProcessor::parameterChanged (const juce::String& parameterID, float newValue)
 {
-    if (parameterID == ParamIDs::reverb)
+    if (parameterID == ParamIDs::chorus)
+    {
+        applyChorusSettings();
+    }
+    else if (parameterID == ParamIDs::reverb)
     {
         reverbMix = newValue;
         reverbParams.wetLevel = static_cast<float> (reverbMix);

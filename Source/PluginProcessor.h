@@ -51,7 +51,10 @@ private:
         double phase[4] = {};
         double phaseInc[4] = {};
         double ampEnv = 0.0;
+        double fegEnv = 0.0;
+        int fegStage = 0;   // 0 idle, 1 attack, 2 decay, 3 sustain, 4 release
         double filterState = 0.0;
+        double filterState2 = 0.0;
         double level[4] = { 0.9, 0.45, 0.22, 0.18 };
         double detune[4] = { 0.0, -7.0, 5.0, 12.0 };
         bool active = false;
@@ -68,11 +71,18 @@ private:
     std::atomic<int> activeVoices { 0 };
     std::atomic<float> outputPeak { 0.0f };
 
-    // Lightweight reverb bus
+    // Lightweight reverb + chorus send buses
     juce::dsp::Reverb reverb;
     juce::dsp::Reverb::Parameters reverbParams;
     bool reverbReady = false;
     double reverbMix = 0.25;
+
+    juce::dsp::Chorus<float> chorus;
+    bool chorusReady = false;
+    void applyChorusSettings();
+
+    juce::AudioBuffer<float> dryScratch;
+    juce::AudioBuffer<float> fxScratch;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (EONisyaAudioProcessor)
 };
