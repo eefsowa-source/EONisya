@@ -93,3 +93,13 @@ if(APPLE)
 elseif(WIN32)
     target_compile_options(EONisya PRIVATE /W4)
 endif()
+
+# ── Tests ────────────────────────────────────────────────────────────────
+enable_testing()
+
+add_executable(RenderSmoke Tests/RenderSmoke.cpp)
+set_target_properties(RenderSmoke PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_link_libraries(RenderSmoke PRIVATE EONisya)
+add_test(NAME RenderSmoke
+         COMMAND $<TARGET_FILE:RenderSmoke> "${CMAKE_BINARY_DIR}/render_smoke.wav")
