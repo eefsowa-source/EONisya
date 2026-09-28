@@ -51,7 +51,7 @@ namespace UI
 
             // LCD
             lcd = std::make_unique<LCDPanel>();
-            lcd->setTitle ("MIXING · SONG 04", "Night Drive Sketch",
+            lcd->setTitle (juce::CharPointer_UTF8 ("MIXING · SONG 04"), "Night Drive Sketch",
                            "PARTS USED", "11 / 16",
                            "OUTPUT", "L&R + 8 BUS");
             addAndMakeVisible (*lcd);
@@ -94,7 +94,7 @@ namespace UI
 
         void resized() override
         {
-            const auto b = getLocalBounds();
+            auto b = getLocalBounds();
             const float padX = 16.0f, padY = 14.0f;
             const float colW = 272.0f;
 

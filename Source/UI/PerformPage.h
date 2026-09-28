@@ -60,8 +60,8 @@ namespace UI
 
             // LCD
             lcd = std::make_unique<LCDPanel>();
-            lcd->setTitle ("PERFORM · USER 1 · A01", "Steel Cathedral",
-                           "ENGINE", "AWM2 ×3 + VA ×1",
+            lcd->setTitle (juce::CharPointer_UTF8 ("PERFORM · USER 1 · A01"), "Steel Cathedral",
+                           "ENGINE", juce::CharPointer_UTF8 ("AWM2 ×3 + VA ×1"),
                            "CATEGORY", "Pad / Choir");
             addAndMakeVisible (*lcd);
 
@@ -87,7 +87,7 @@ namespace UI
 
         void resized() override
         {
-            const auto b = getLocalBounds();
+            auto b = getLocalBounds();
             const float padX = 16.0f;
             const float padY = 14.0f;
             const float colW = 272.0f;

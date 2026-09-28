@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 
 # ── Project ─────────────────────────────────────────────────────────────
-project(EONisya VERSION 1.0.0 LANGUAGES CXX)
+project(EONisya VERSION 1.0.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -63,6 +63,12 @@ target_sources(EONisya PRIVATE
 
 target_include_directories(EONisya PRIVATE
     Source
+)
+
+# No released VST2 counterpart exists; silence the VST2/VST3 automation
+# migration guard in juce_audio_plugin_client_VST3.cpp.
+target_compile_definitions(EONisya PUBLIC
+    JUCE_VST3_CAN_REPLACE_VST2=0
 )
 
 # ── Enable JUCE modules ──────────────────────────────────────────────

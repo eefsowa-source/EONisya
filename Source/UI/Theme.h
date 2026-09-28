@@ -38,10 +38,10 @@ namespace Theme
     // Typography
     inline const juce::FontOptions bodyFont (float h)
     {
-        return juce::FontOptions (h).withFallbacks ("Helvetica Neue", "Helvetica", "Arial", "System");
+        return juce::FontOptions (h).withFallbacks ({ "Helvetica Neue", "Helvetica", "Arial", "System" });
     }
     inline const juce::FontOptions condensedFont (float h)
     {
-        return juce::FontOptions (h).withFallbacks ("Arial Narrow", "Helvetica Neue", "Helvetica", "Arial", "System");
+        return juce::FontOptions (h).withFallbacks ({ "Arial Narrow", "Helvetica Neue", "Helvetica", "Arial", "System" });
     }
 }

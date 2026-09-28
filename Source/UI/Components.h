@@ -1,12 +1,14 @@
 #pragma once
 
+#include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 #include "Theme.h"
 
 namespace UI
 {
     // ── Small labelled knob (40px, marker at rotation) ────────────────────
-    class Knob : public juce::Component
+    class Knob : public juce::Component,
+                 private juce::AudioProcessorParameter::Listener
     {
     public:
         Knob (juce::AudioParameterFloat& param, juce::String label, float startAngle = -135.0f)
@@ -65,7 +67,7 @@ namespace UI
             const auto range = parameter.getNormalisableRange();
             const float speed = range.convertTo0to1 (range.end) / 200.0f;
             parameter.setValueNotifyingHost (juce::jlimit (0.0f, 1.0f,
-                                                           parameter.getValue() - delta * speed));
+                                                           range.convertTo0to1 (parameter.get()) - delta * speed));
         }
 
         void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w) override
@@ -73,15 +75,16 @@ namespace UI
             const auto range = parameter.getNormalisableRange();
             const float speed = range.convertTo0to1 (range.end) / 200.0f;
             parameter.setValueNotifyingHost (juce::jlimit (0.0f, 1.0f,
-                                                           parameter.getValue() + w.deltaY * speed));
+                                                           range.convertTo0to1 (parameter.get()) + w.deltaY * speed));
         }
 
         // For layout: label sits under the knob, painted by the container.
         const juce::String& getLabel() const noexcept { return labelText; }
 
-        void parameterChanged (juce::AudioParameterFloat*, float) override { repaint(); }
-
     private:
+        void parameterValueChanged (int, float) override { repaint(); }
+        void parameterGestureChanged (int, bool) override {}
+
         juce::AudioParameterFloat& parameter;
         juce::String labelText;
         float startAngleDeg = -135.0f;
@@ -91,7 +94,8 @@ namespace UI
     };
 
     // ── Vertical fader (7px wide, like control sliders) ──────────────────
-    class Fader : public juce::Component
+    class Fader : public juce::Component,
+                  private juce::AudioProcessorParameter::Listener
     {
     public:
         explicit Fader (juce::AudioParameterFloat& param) : parameter (param)
@@ -127,20 +131,20 @@ namespace UI
         {
             const float norm = juce::jlimit (0.0f, 1.0f,
                                              1.0f - static_cast<float> (e.getPosition().y) / static_cast<float> (getHeight()));
-            const auto range = parameter.getNormalisableRange();
-            parameter.setValueNotifyingHost (range.convertFrom0to1 (norm));
+            parameter.setValueNotifyingHost (norm);
         }
 
         void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails& w) override
         {
             const auto range = parameter.getNormalisableRange();
             parameter.setValueNotifyingHost (juce::jlimit (0.0f, 1.0f,
-                                                           parameter.getValue() + w.deltaY * 0.01f));
+                                                           range.convertTo0to1 (parameter.get()) + w.deltaY * 0.01f));
         }
 
-        void parameterChanged (juce::AudioParameterFloat*, float) override { repaint(); }
-
     private:
+        void parameterValueChanged (int, float) override { repaint(); }
+        void parameterGestureChanged (int, bool) override {}
+
         juce::AudioParameterFloat& parameter;
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Fader)
     };
@@ -248,7 +252,7 @@ namespace UI
         }
 
     private:
-        juce::String octaveLabel = "C1 — C5";
+        juce::String octaveLabel = juce::CharPointer_UTF8 ("C1 — C5");
         JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (Keybed)
     };
 }

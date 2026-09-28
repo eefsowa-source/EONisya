@@ -188,20 +188,20 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
-    const double baseCutoff = static_cast<double> (*cutoffParam);
-    const double resonance  = static_cast<double> (*resoParam) * 2.0 + 0.02;
-    const double ampAttack  = juce::jmax (0.0005, 1.0 - std::exp (-1.0 / (static_cast<double> (*attackParam) * sampleRate + 1.0)));
-    const double ampRelease = juce::jmax (0.0002, 1.0 - std::exp (-1.0 / (static_cast<double> (*releaseParam) * sampleRate + 1.0)));
-    const double fegAttack  = juce::jmax (0.0005, 1.0 - std::exp (-1.0 / (static_cast<double> (*fegAtkParam) * sampleRate + 1.0)));
-    const double fegDecay  = juce::jmax (0.0002, 1.0 - std::exp (-1.0 / (static_cast<double> (*fegDcyParam) * sampleRate + 1.0)));
-    const double fegSus    = static_cast<double> (*fegSusParam);
-    const double fegRel    = juce::jmax (0.0002, 1.0 - std::exp (-1.0 / (static_cast<double> (*fegRelParam) * sampleRate + 1.0)));
-    const double keyFollowAmt = static_cast<double> (*keyFollow);
-    const double drive     = static_cast<double> (*driveParam) * 4.0 + 1.0;
-    const double ampGain   = juce::Decibels::decibelsToGain (static_cast<double> (*volParam));
-    const double panLeft   = juce::jmin (1.0, juce::jmax (0.0, 1.0 - static_cast<double> (*panParam))) * 0.707;
-    const double panRight  = juce::jmin (1.0, juce::jmax (0.0, 1.0 + static_cast<double> (*panParam))) * 0.707;
-    const double masterGain = static_cast<double> (*masterParam) / 127.0;
+    const double baseCutoff = static_cast<double> (cutoffParam.load());
+    const double resonance  = static_cast<double> (resoParam.load()) * 2.0 + 0.02;
+    const double ampAttack  = juce::jmax (0.0005, 1.0 - std::exp (-1.0 / (static_cast<double> (attackParam.load()) * sampleRate + 1.0)));
+    const double ampRelease = juce::jmax (0.0002, 1.0 - std::exp (-1.0 / (static_cast<double> (releaseParam.load()) * sampleRate + 1.0)));
+    const double fegAttack  = juce::jmax (0.0005, 1.0 - std::exp (-1.0 / (static_cast<double> (fegAtkParam.load()) * sampleRate + 1.0)));
+    const double fegDecay  = juce::jmax (0.0002, 1.0 - std::exp (-1.0 / (static_cast<double> (fegDcyParam.load()) * sampleRate + 1.0)));
+    const double fegSus    = static_cast<double> (fegSusParam.load());
+    const double fegRel    = juce::jmax (0.0002, 1.0 - std::exp (-1.0 / (static_cast<double> (fegRelParam.load()) * sampleRate + 1.0)));
+    const double keyFollowAmt = static_cast<double> (keyFollow.load());
+    const double drive     = static_cast<double> (driveParam.load()) * 4.0 + 1.0;
+    const double ampGain   = juce::Decibels::decibelsToGain (static_cast<double> (volParam.load()));
+    const double panLeft   = juce::jmin (1.0, juce::jmax (0.0, 1.0 - static_cast<double> (panParam.load()))) * 0.707;
+    const double panRight  = juce::jmin (1.0, juce::jmax (0.0, 1.0 + static_cast<double> (panParam.load()))) * 0.707;
+    const double masterGain = static_cast<double> (masterParam.load()) / 127.0;
 
     int activeCount = 0;
 
@@ -287,7 +287,7 @@ void EONisyaAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             auto* w = wet.getWritePointer (c);
             auto* d = buffer.getReadPointer (c);
             for (int i = 0; i < numSamples; ++i)
-                w[i] = d[i] * static_cast<float> (revSendParam->load());
+                w[i] = d[i] * revSendParam.load();
         }
         juce::dsp::AudioBlock<float> wetBlock (wet);
         reverb.process (juce::dsp::ProcessContextReplacing<float> (wetBlock));
@@ -341,4 +341,10 @@ void EONisyaAudioProcessor::setStateInformation (const void* data, int sizeInByt
     std::unique_ptr<juce::XmlElement> xml (getXmlFromBinary (data, sizeInBytes));
     if (xml != nullptr && xml->hasTagName (apvts.state.getType()))
         apvts.replaceState (juce::ValueTree::fromXml (*xml));
+}
+
+// ── Entry point ─────────────────────────────────────────────────────────
+juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
+{
+    return new EONisyaAudioProcessor();
 }

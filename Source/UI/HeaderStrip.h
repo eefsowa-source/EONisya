@@ -1,6 +1,7 @@
 #pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
+#include "Components.h"
 #include "Theme.h"
 
 namespace UI
@@ -35,6 +36,14 @@ namespace UI
             tempoValue = std::move (tempo);
             masterValue = std::move (master);
             polyValue = std::move (poly);
+            repaint();
+        }
+
+        void setMode (juce::String modeLabel, int mode)
+        {
+            modeText = std::move (modeLabel);
+            for (int i = 0; i < 5; ++i)
+                tabs[i]->setActive (i == mode);
             repaint();
         }
 

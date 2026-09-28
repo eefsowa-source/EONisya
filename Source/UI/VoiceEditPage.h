@@ -67,8 +67,8 @@ namespace UI
 
             // LCD
             lcd = std::make_unique<LCDPanel>();
-            lcd->setTitle ("VOICE · PRE 4 · D12", "Analog Saw Stack",
-                           "MODE", "VA · 4 ELEM",
+            lcd->setTitle (juce::CharPointer_UTF8 ("VOICE · PRE 4 · D12"), "Analog Saw Stack",
+                           "MODE", juce::CharPointer_UTF8 ("VA · 4 ELEM"),
                            "XA", "CYCLE");
             addAndMakeVisible (*lcd);
 
@@ -88,7 +88,7 @@ namespace UI
 
             // Keybed
             keybed = std::make_unique<UI::Keybed>();
-            keybed->setOctaveLabel ("C2 — C6");
+            keybed->setOctaveLabel (juce::CharPointer_UTF8 ("C2 — C6"));
             addAndMakeVisible (*keybed);
         }
 
@@ -101,7 +101,7 @@ namespace UI
 
         void resized() override
         {
-            const auto b = getLocalBounds();
+            auto b = getLocalBounds();
             const float padX = 16.0f, padY = 14.0f;
             const float colW = 272.0f;
 
