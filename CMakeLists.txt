@@ -44,6 +44,7 @@ juce_add_plugin(EONisya
     COMPANY_NAME              "EON Audio Systems"
     COMPANY_WEBSITE           "https://eonaudio.systems"
     COMPANY_EMAIL             "dev@eonaudio.systems"
+    COMPANY_COPYRIGHT         "Copyright (c) 2026 EON Audio Systems"
 
     # ── Bundle identifiers ──
     BUNDLE_ID                 com.eonaudio.eonismotif6
@@ -78,6 +79,9 @@ target_link_libraries(EONisya PUBLIC
     juce::juce_audio_utils
     juce::juce_gui_basics
     juce::juce_dsp
+    juce::juce_recommended_config_flags
+    juce::juce_recommended_lto_flags
+    juce::juce_recommended_warning_flags
 )
 
 # ── OS-specific ──────────────────────────────────────────────────────────
